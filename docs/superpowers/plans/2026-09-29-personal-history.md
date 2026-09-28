@@ -26,6 +26,6 @@
 
 ### Task 3: Publish
 
-- [ ] Copy the production bundle into the GitHub Pages source directory.
-- [ ] Commit and push source plus production assets.
-- [ ] Verify GitHub Pages deployment and live HTTP responses.
+- [x] Copy the production bundle into the GitHub Pages source directory.
+- [x] Commit and push source plus production assets.
+- [x] Verify GitHub Pages deployment and live HTTP responses.
