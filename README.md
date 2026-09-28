@@ -1,0 +1,1 @@
+# 芽記 SproutNote\n\n個人使用的幼兒成長紀錄工具。資料保存在使用者的瀏覽器中，不需要會員登入。\n\n線上版：https://0xiao7.github.io/sproutnote/\n
