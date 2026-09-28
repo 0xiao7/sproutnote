@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addChild, addIndicator, archiveCurrentTerm, createInitialState, expandObservation, movePhotoToActivity, removeChild, removeIndicator, reportForChild, toggleChildTag, updateChild, updateObservation } from "./lib/model.js";
 import { loadState, saveState } from "./lib/storage.js";
 import { buildReportHtml, buildWordHtml } from "./lib/export.js";
@@ -27,7 +27,7 @@ function PhotoCard({ photo, activity, children, selected, onClick, compact = fal
 
 function EmptyState({ title, copy }) { return <div className="empty-state"><span className="empty-mark">＋</span><h3>{title}</h3><p>{copy}</p></div>; }
 
-function ImportScreen({ state, setState, notify }) {
+function ImportScreen({ state, setState, notify, onInstall }) {
   const inputRef = useRef(null); const [dragging, setDragging] = useState(false);
   async function importFiles(fileList) {
     const files = [...fileList]; if (!files.length) return;
@@ -38,7 +38,7 @@ function ImportScreen({ state, setState, notify }) {
     setState((current) => ({ ...current, photos: [...imported, ...current.photos] })); notify(`已匯入 ${files.length} 張，只保存在這台裝置`);
   }
   return <section className="screen import-screen">
-    <header className="screen-title"><div><span className="eyebrow">本機照片庫</span><h1>把今天的故事放進來</h1><p>照片會先在裝置內縮圖處理，不會自動上傳到任何平台。</p></div><button className="primary" onClick={() => inputRef.current?.click()}>選擇照片</button><input ref={inputRef} className="visually-hidden" type="file" accept="image/*" multiple onChange={(event) => importFiles(event.target.files)} /></header>
+    <header className="screen-title"><div><span className="eyebrow">本機照片庫</span><h1>把今天的故事放進來</h1><p>照片會先在裝置內縮圖處理，不會自動上傳到任何平台。</p></div><div className="screen-actions"><button className="secondary" onClick={onInstall}>安裝 Web App</button><button className="primary" onClick={() => inputRef.current?.click()}>選擇照片</button></div><input ref={inputRef} className="visually-hidden" type="file" accept="image/*" multiple onChange={(event) => importFiles(event.target.files)} /></header>
     <div className="stats-row"><article><b>{state.photos.length}</b><span>本學期照片</span></article><article><b>{state.activities.length}</b><span>活動群組</span></article><article><b>{state.children.length}</b><span>孩子</span></article><article><b>{state.observations.length}</b><span>觀察紀錄</span></article></div>
     <div className={`drop-zone ${dragging ? "is-dragging" : ""}`} onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(event) => { event.preventDefault(); setDragging(false); importFiles(event.dataTransfer.files); }}><div><span className="drop-kicker">快速匯入</span><h2>拖進來，或從相簿挑選</h2><p>支援 JPG、PNG、HEIC；每張上限 12MB。匯入時會自動縮成適合報告的尺寸。</p></div><button className="secondary" onClick={() => inputRef.current?.click()}>瀏覽檔案</button></div>
     <div className="section-heading"><div><span className="eyebrow">最近匯入</span><h2>這學期的片刻</h2></div><span className="privacy-chip">僅此裝置</span></div>
@@ -132,10 +132,40 @@ function AppTopbar({ state }) { const completed = [state.photos.length > 0, stat
 function MobileNav({ active, setActive }) { return <nav className="mobile-nav no-print">{NAV.map((item) => <button key={item.id} className={active === item.id ? "is-active" : ""} onClick={() => setActive(item.id)}><span>{item.number}</span>{item.label}</button>)}</nav>; }
 
 export function App() {
-  const [state, setState] = useState(() => loadState() || createInitialState()); const [active, setActive] = useState("import"); const [message, setMessage] = useState(""); const timerRef = useRef();
-  useEffect(() => { saveState(state); }, [state]); useEffect(() => () => clearTimeout(timerRef.current), []);
+  const [state, setState] = useState(() => loadState() || createInitialState()); const [active, setActive] = useState("import"); const [message, setMessage] = useState(""); const [installPrompt, setInstallPrompt] = useState(null); const timerRef = useRef();
+  useEffect(() => { saveState(state); }, [state]);
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+  useEffect(() => {
+    const captureInstallPrompt = (event) => { event.preventDefault(); setInstallPrompt(event); };
+    const clearInstallPrompt = () => setInstallPrompt(null);
+    window.addEventListener("beforeinstallprompt", captureInstallPrompt);
+    window.addEventListener("appinstalled", clearInstallPrompt);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", captureInstallPrompt);
+      window.removeEventListener("appinstalled", clearInstallPrompt);
+    };
+  }, []);
   function notify(text) { setMessage(text); clearTimeout(timerRef.current); timerRef.current = setTimeout(() => setMessage(""), 2600); }
-  const screen = useMemo(() => { const props = { state, setState, notify }; if (active === "organize") return <OrganizeScreen {...props} />; if (active === "class") return <ClassScreen {...props} />; if (active === "tag") return <TagScreen {...props} />; if (active === "journal") return <JournalScreen {...props} />; if (active === "report") return <ReportScreen {...props} />; return <ImportScreen {...props} />; }, [active, state]);
+  async function installApp() {
+    if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone) { notify("芽記已經是 Web App"); return; }
+    if (installPrompt) {
+      await installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      setInstallPrompt(null);
+      notify(outcome === "accepted" ? "芽記已加入這台裝置" : "已取消安裝");
+      return;
+    }
+    const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    notify(isiOS ? "請點 Safari 分享，再選「加入主畫面」" : "請從瀏覽器選單選「安裝芽記」或「建立捷徑」");
+  }
+  const props = { state, setState, notify };
+  let screen;
+  if (active === "organize") screen = <OrganizeScreen {...props} />;
+  else if (active === "class") screen = <ClassScreen {...props} />;
+  else if (active === "tag") screen = <TagScreen {...props} />;
+  else if (active === "journal") screen = <JournalScreen {...props} />;
+  else if (active === "report") screen = <ReportScreen {...props} />;
+  else screen = <ImportScreen {...props} onInstall={installApp} />;
   return <div className="app-shell"><AppSidebar active={active} setActive={setActive} state={state} /><div className="app-main"><AppTopbar state={state} />{screen}</div><MobileNav active={active} setActive={setActive} /><Notice message={message} /></div>;
 }
 

@@ -1,0 +1,17 @@
+{
+  "id": "/sproutnote/",
+  "name": "芽記 SproutNote",
+  "short_name": "芽記",
+  "description": "個人使用的幼兒成長紀錄工具",
+  "lang": "zh-Hant",
+  "start_url": "/sproutnote/",
+  "scope": "/sproutnote/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f2e9",
+  "theme_color": "#264f43",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

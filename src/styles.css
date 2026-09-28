@@ -20,3 +20,5 @@
 @media(max-width:639px){.history-grid{grid-template-columns:1fr}.history-section .section-heading{align-items:flex-start;gap:12px}.history-section .section-heading .secondary{width:100%}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 @media print{body{background:#fff}.no-print,.mobile-nav,.notice{display:none!important}.app-main{margin:0}.screen{padding:0;max-width:none}.report-workspace{display:block}.paper{box-shadow:none;width:210mm;min-height:297mm;margin:0;padding:16mm;aspect-ratio:auto}.paper-gallery{height:62mm}@page{size:A4;margin:0}}
+.screen-actions{display:flex;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:639px){.screen-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.screen-actions .primary,.screen-actions .secondary{width:100%;padding-inline:12px}}
