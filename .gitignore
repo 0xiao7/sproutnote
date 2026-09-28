@@ -1,0 +1,11 @@
+node_modules/
+dist/
+pages-dist/
+qa/
+.openai/
+.DS_Store
+AGENTS.md
+task_plan.md
+findings.md
+progress.md
+*.local
