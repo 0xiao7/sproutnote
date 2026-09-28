@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   addChild,
   addIndicator,
+  archiveCurrentTerm,
   createInitialState,
   expandObservation,
   normalizeState,
@@ -73,11 +74,37 @@ test("template catalogs provide selectable report, activity and observation cont
 
 test("legacy saved state is normalized without losing records", () => {
   const legacy = createInitialState();
+  delete legacy.classMeta.ownerName;
   delete legacy.reportSettings;
   const normalized = normalizeState(legacy);
+  assert.equal(normalized.classMeta.ownerName, "Fay");
   assert.equal(normalized.reportSettings.templateId, "classic");
   assert.equal(normalized.photos.length, legacy.photos.length);
   assert.equal(normalized.children.length, legacy.children.length);
+});
+
+test("personal workspace stores an editable recorder name", () => {
+  const state = createInitialState();
+  assert.equal(state.classMeta.ownerName, "Fay");
+  assert.equal(reportForChild(state, "child-1").classMeta.ownerName, "Fay");
+});
+
+test("current term can be archived as a complete historical record", () => {
+  const state = createInitialState();
+  const archived = archiveCurrentTerm(state);
+  assert.equal(archived.history.length, 1);
+  assert.equal(archived.history[0].classMeta.period, "2026 上學期");
+  assert.equal(archived.history[0].classMeta.ownerName, "Fay");
+  assert.equal(archived.history[0].children.length, state.children.length);
+  assert.equal(archived.history[0].photos.length, state.photos.length);
+  assert.equal(archived.history[0].observations.length, state.observations.length);
+  assert.equal(state.history.length, 0);
+});
+
+test("archiving the unchanged term updates its snapshot instead of duplicating it", () => {
+  const once = archiveCurrentTerm(createInitialState());
+  const twice = archiveCurrentTerm(once);
+  assert.equal(twice.history.length, 1);
 });
 
 test("observation expansion uses a selected type while preserving editable keywords", () => {

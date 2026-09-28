@@ -7,12 +7,14 @@ export function createInitialState() {
   return {
     version: 1,
     classMeta: {
+      ownerName: "Fay",
       school: "晨光幼兒園",
       className: "向日葵班",
       period: "2026 上學期",
       ageGroup: "中大混齡 4–6 歲",
     },
     reportSettings: { ...DEFAULT_REPORT_SETTINGS },
+    history: [],
     children: [
       { id: "child-1", seat: 1, name: "小安", color: "#D66A4A" },
       { id: "child-2", seat: 2, name: "樂樂", color: "#C49A36" },
@@ -179,6 +181,26 @@ export function normalizeState(state) {
     photos: Array.isArray(state?.photos) ? state.photos : initial.photos,
     observations: Array.isArray(state?.observations) ? state.observations : initial.observations,
     indicators: state?.indicators && typeof state.indicators === "object" ? state.indicators : initial.indicators,
+    history: Array.isArray(state?.history) ? state.history : [],
+  };
+}
+
+export function archiveCurrentTerm(state) {
+  const archiveId = `term-${state.classMeta.school}-${state.classMeta.className}-${state.classMeta.period}`;
+  const snapshot = {
+    id: archiveId,
+    archivedAt: new Date().toISOString(),
+    classMeta: { ...state.classMeta },
+    reportSettings: { ...state.reportSettings },
+    children: state.children.map((child) => ({ ...child })),
+    activities: state.activities.map((activity) => ({ ...activity })),
+    photos: state.photos.map((photo) => ({ ...photo, childIds: [...photo.childIds] })),
+    observations: state.observations.map((observation) => ({ ...observation })),
+    indicators: Object.fromEntries(Object.entries(state.indicators).map(([childId, values]) => [childId, [...values]])),
+  };
+  return {
+    ...state,
+    history: [snapshot, ...(state.history || []).filter((item) => item.id !== archiveId)],
   };
 }
 

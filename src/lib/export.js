@@ -11,7 +11,7 @@ function reportBody(report, settings) {
     ? `<ul>${report.indicators.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
     : "<p>目前尚未設定學習指標。</p>";
   const photos = report.photos.slice(0, 6).map((photo) => `<figure><img src="${escapeHtml(photo.src)}" alt="${escapeHtml(photo.title)}"><figcaption>${escapeHtml(photo.title)}</figcaption></figure>`).join("");
-  return `<header><h1>${escapeHtml(title)}</h1><h2>${escapeHtml(report.child.name)}</h2><p>${escapeHtml(settings.intro || "")}</p><small>${escapeHtml(report.classMeta.school)} · ${escapeHtml(report.classMeta.className)} · ${escapeHtml(report.classMeta.period)}</small></header><main><section class="gallery">${photos}</section><section><h3>老師的觀察</h3>${observations}</section><section><h3>成長指標</h3>${indicators}</section></main>`;
+  return `<header><h1>${escapeHtml(title)}</h1><h2>${escapeHtml(report.child.name)}</h2><p>${escapeHtml(settings.intro || "")}</p><small>${escapeHtml(report.classMeta.school)} · ${escapeHtml(report.classMeta.className)} · ${escapeHtml(report.classMeta.period)} · 紀錄者：${escapeHtml(report.classMeta.ownerName)}</small></header><main><section class="gallery">${photos}</section><section><h3>老師的觀察</h3>${observations}</section><section><h3>成長指標</h3>${indicators}</section></main>`;
 }
 
 export function buildReportHtml(report, settings = {}) {
