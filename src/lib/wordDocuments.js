@@ -106,21 +106,26 @@ function imageBytes(dataUrl) {
   return { bytes, type: header.includes("image/png") ? "png" : "jpg" };
 }
 
-async function photoParagraph(photo, width = 190, height = 126) {
+async function photoRun(photo, width, height) {
   try {
     let data;
     if (photo.src.startsWith("data:")) data = imageBytes(photo.src);
     else {
       const response = await fetch(photo.src);
-      if (!response.ok) return para(photo.title || "照片", { size: 17 });
+      if (!response.ok) return null;
       const blob = await response.blob();
       data = { bytes: new Uint8Array(await blob.arrayBuffer()), type: blob.type.includes("png") ? "png" : "jpg" };
     }
-    if (!data) return para(photo.title || "照片", { size: 17 });
-    return new Paragraph({ spacing: { after: 65 }, children: [new ImageRun({ type: data.type, data: data.bytes, transformation: { width, height }, altText: { title: txt(photo.title) || "照片", description: txt(photo.title) || "照片", name: txt(photo.title) || "照片" } })] });
+    if (!data) return null;
+    return new ImageRun({ type: data.type, data: data.bytes, transformation: { width, height }, altText: { title: txt(photo.title) || "照片", description: txt(photo.title) || "照片", name: txt(photo.title) || "照片" } });
   } catch {
-    return para(photo.title || "照片", { size: 17 });
+    return null;
   }
+}
+
+async function photoParagraph(photo, width = 190, height = 126) {
+  const run = await photoRun(photo, width, height);
+  return run ? new Paragraph({ spacing: { after: 65 }, children: [run] }) : para(photo.title || "照片", { size: 17 });
 }
 
 async function photoBlock(photos, limit, width = 190, height = 126) {
@@ -130,6 +135,17 @@ async function photoBlock(photos, limit, width = 190, height = 126) {
     children.push(para(photo.title || "照片說明", { size: 16, after: 80 }));
   }
   return children;
+}
+
+async function coursePhotoBlock(photos) {
+  if (photos.length < 2) return photoBlock(photos, 1, 180, 105);
+  const firstTwo = photos.slice(0, 2);
+  const runs = await Promise.all(firstTwo.map((photo) => photoRun(photo, 160, 95)));
+  if (runs.some((run) => !run)) return photoBlock(firstTwo, 2, 160, 95);
+  return [
+    new Paragraph({ spacing: { after: 55 }, children: [runs[0], new TextRun("　"), runs[1]] }),
+    para(firstTwo.map((photo) => photo.title || "照片").join("　／　"), { size: 15, after: 75 }),
+  ];
 }
 
 async function qrParagraph(link) {
@@ -151,7 +167,8 @@ async function contactCell(ctx, mode, width, compact = false) {
   if (mode === "course-share" && f.topic) parts.push(para(`課程主題：${f.topic}`, { bold: true, size, after: 60 }));
   if (f.common) parts.push(...lines(f.common, { size, after: 60 }));
   if (body) parts.push(...lines(body, { size, after: 60 }));
-  if (mode === "contact-photo" || mode === "course-share") parts.push(...await photoBlock(photos, mode === "course-share" || photos.length > 1 ? 2 : 1, mode === "course-share" ? 220 : photos.length > 1 ? 120 : 150, mode === "course-share" ? 140 : photos.length > 1 ? 75 : 100));
+  if (mode === "course-share") parts.push(...await coursePhotoBlock(photos));
+  else if (mode === "contact-photo") parts.push(...await photoBlock(photos, photos.length > 1 ? 2 : 1, photos.length > 1 ? 120 : 150, photos.length > 1 ? 75 : 100));
   if (mode === "contact-qr") {
     const links = [f.link1, f.link2, f.link3, f.link4].filter(Boolean);
     for (const link of links) parts.push(await qrParagraph(link));

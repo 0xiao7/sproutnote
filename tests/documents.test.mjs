@@ -140,3 +140,19 @@ test("contact QR and selected photo are embedded as Word media", async () => {
   const photoZip = await JSZip.loadAsync(await (await buildWordBlob("contact-photo", state, photoDraft, "child-1")).arrayBuffer());
   assert.ok(Object.keys(photoZip.files).some((name) => name.startsWith("word/media/") && name.endsWith(".png")));
 });
+
+test("monthly sharing places two photos on one line to preserve four cells per A3 side", async () => {
+  const { createDefaultDocumentDraft } = await import("../src/lib/documentCatalog.js");
+  const { buildWordBlob } = await import("../src/lib/wordDocuments.js");
+  const state = createInitialState();
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
+  state.photos = [1, 2].map((number) => ({ id: `photo-${number}`, src: png, title: `照片 ${number}`, childIds: ["child-1"] }));
+  const draft = createDefaultDocumentDraft("course-share");
+  draft.photoIds = state.photos.map((photo) => photo.id);
+  draft.fields.common = "本月觀察樹葉。".repeat(30);
+  const zip = await JSZip.loadAsync(await (await buildWordBlob("course-share", state, draft, "child-1")).arrayBuffer());
+  const xml = await zip.file("word/document.xml").async("string");
+  const photoParagraphs = [...xml.matchAll(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g)].map((match) => match[0]).filter((part) => part.includes("<w:drawing>"));
+  assert.equal(photoParagraphs.length, 1);
+  assert.equal((photoParagraphs[0].match(/<w:drawing>/g) || []).length, 2);
+});
