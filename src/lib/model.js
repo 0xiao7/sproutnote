@@ -14,6 +14,7 @@ export function createInitialState() {
       ageGroup: "中大混齡 4–6 歲",
     },
     reportSettings: { ...DEFAULT_REPORT_SETTINGS },
+    documentDrafts: {},
     history: [],
     children: [
       { id: "child-1", seat: 1, name: "小安", color: "#D66A4A" },
@@ -176,6 +177,7 @@ export function normalizeState(state) {
     ...state,
     classMeta: { ...initial.classMeta, ...(state?.classMeta || {}) },
     reportSettings: { ...DEFAULT_REPORT_SETTINGS, ...(state?.reportSettings || {}) },
+    documentDrafts: state?.documentDrafts && typeof state.documentDrafts === "object" ? state.documentDrafts : {},
     children: Array.isArray(state?.children) ? state.children : initial.children,
     activities: Array.isArray(state?.activities) ? state.activities : initial.activities,
     photos: Array.isArray(state?.photos) ? state.photos : initial.photos,
@@ -192,6 +194,7 @@ export function archiveCurrentTerm(state) {
     archivedAt: new Date().toISOString(),
     classMeta: { ...state.classMeta },
     reportSettings: { ...state.reportSettings },
+    documentDrafts: structuredClone(state.documentDrafts || {}),
     children: state.children.map((child) => ({ ...child })),
     activities: state.activities.map((activity) => ({ ...activity })),
     photos: state.photos.map((photo) => ({ ...photo, childIds: [...photo.childIds] })),
