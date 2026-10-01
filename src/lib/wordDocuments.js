@@ -106,16 +106,37 @@ function imageBytes(dataUrl) {
   return { bytes, type: header.includes("image/png") ? "png" : "jpg" };
 }
 
-async function photoRun(photo, width, height) {
-  try {
+async function loadPhotoData(src, imageCache) {
+  if (!imageCache.has(src)) imageCache.set(src, (async () => {
     let data;
-    if (photo.src.startsWith("data:")) data = imageBytes(photo.src);
+    if (src.startsWith("data:")) data = imageBytes(src);
     else {
-      const response = await fetch(photo.src);
+      const response = await fetch(src);
       if (!response.ok) return null;
       const blob = await response.blob();
       data = { bytes: new Uint8Array(await blob.arrayBuffer()), type: blob.type.includes("png") ? "png" : "jpg" };
     }
+    if (!data || typeof document === "undefined" || data.bytes.byteLength < 500_000) return data;
+    let url;
+    try {
+      url = URL.createObjectURL(new Blob([data.bytes], { type: data.type === "png" ? "image/png" : "image/jpeg" }));
+      const image = new Image();
+      await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = url; });
+      const scale = Math.min(1, 800 / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
+      return imageBytes(canvas.toDataURL("image/jpeg", 0.76)) || data;
+    } catch { return data; }
+    finally { if (url) URL.revokeObjectURL(url); }
+  })());
+  return imageCache.get(src);
+}
+
+async function photoRun(photo, width, height, imageCache) {
+  try {
+    const data = await loadPhotoData(photo.src, imageCache);
     if (!data) return null;
     return new ImageRun({ type: data.type, data: data.bytes, transformation: { width, height }, altText: { title: txt(photo.title) || "照片", description: txt(photo.title) || "照片", name: txt(photo.title) || "照片" } });
   } catch {
@@ -123,25 +144,25 @@ async function photoRun(photo, width, height) {
   }
 }
 
-async function photoParagraph(photo, width = 190, height = 126) {
-  const run = await photoRun(photo, width, height);
+async function photoParagraph(photo, width = 190, height = 126, imageCache) {
+  const run = await photoRun(photo, width, height, imageCache);
   return run ? new Paragraph({ spacing: { after: 65 }, children: [run] }) : para(photo.title || "照片", { size: 17 });
 }
 
-async function photoBlock(photos, limit, width = 190, height = 126) {
+async function photoBlock(photos, limit, width = 190, height = 126, imageCache) {
   const children = [];
   for (const photo of photos.slice(0, limit)) {
-    children.push(await photoParagraph(photo, width, height));
+    children.push(await photoParagraph(photo, width, height, imageCache));
     children.push(para(photo.title || "照片說明", { size: 16, after: 80 }));
   }
   return children;
 }
 
-async function coursePhotoBlock(photos) {
-  if (photos.length < 2) return photoBlock(photos, 1, 180, 105);
+async function coursePhotoBlock(photos, imageCache) {
+  if (photos.length < 2) return photoBlock(photos, 1, 180, 105, imageCache);
   const firstTwo = photos.slice(0, 2);
-  const runs = await Promise.all(firstTwo.map((photo) => photoRun(photo, 160, 95)));
-  if (runs.some((run) => !run)) return photoBlock(firstTwo, 2, 160, 95);
+  const runs = await Promise.all(firstTwo.map((photo) => photoRun(photo, 160, 95, imageCache)));
+  if (runs.some((run) => !run)) return photoBlock(firstTwo, 2, 160, 95, imageCache);
   return [
     new Paragraph({ spacing: { after: 55 }, children: [runs[0], new TextRun("　"), runs[1]] }),
     para(firstTwo.map((photo) => photo.title || "照片").join("　／　"), { size: 15, after: 75 }),
@@ -156,7 +177,7 @@ async function qrParagraph(link) {
   return new Paragraph({ children: [new ImageRun({ type: "png", data: data.bytes, transformation: { width: 85, height: 85 }, altText: { title: "課程連結 QR", description: value, name: "課程連結 QR" } })] });
 }
 
-async function contactCell(ctx, mode, width, compact = false) {
+async function contactCell(ctx, mode, width, compact = false, imageCache) {
   const { f, meta, report, body, photos } = ctx;
   const childName = report?.child.name || "幼兒";
   const size = compact ? 16 : 18;
@@ -167,8 +188,8 @@ async function contactCell(ctx, mode, width, compact = false) {
   if (mode === "course-share" && f.topic) parts.push(para(`課程主題：${f.topic}`, { bold: true, size, after: 60 }));
   if (f.common) parts.push(...lines(f.common, { size, after: 60 }));
   if (body) parts.push(...lines(body, { size, after: 60 }));
-  if (mode === "course-share") parts.push(...await coursePhotoBlock(photos));
-  else if (mode === "contact-photo") parts.push(...await photoBlock(photos, photos.length > 1 ? 2 : 1, photos.length > 1 ? 120 : 150, photos.length > 1 ? 75 : 100));
+  if (mode === "course-share") parts.push(...await coursePhotoBlock(photos, imageCache));
+  else if (mode === "contact-photo") parts.push(...await photoBlock(photos, photos.length > 1 ? 2 : 1, photos.length > 1 ? 120 : 150, photos.length > 1 ? 75 : 100, imageCache));
   if (mode === "contact-qr") {
     const links = [f.link1, f.link2, f.link3, f.link4].filter(Boolean);
     for (const link of links) parts.push(await qrParagraph(link));
@@ -179,7 +200,7 @@ async function contactCell(ctx, mode, width, compact = false) {
   return cell(parts, width, { size });
 }
 
-async function contactPages(templateId, state, draft, childIds) {
+async function contactPages(templateId, state, draft, childIds, imageCache) {
   const entries = childIds.map((id) => {
     const ctx = context(templateId, state, draft, id);
     const text = [ctx.f.common, ctx.body, ctx.f.reminder, ctx.f.songs].join(" ");
@@ -199,7 +220,7 @@ async function contactPages(templateId, state, draft, childIds) {
       const cells = [];
       for (let colIndex = 0; colIndex < layout.columns; colIndex++) {
         const entry = page[rowIndex * layout.columns + colIndex];
-        cells.push(entry ? await contactCell(context(templateId, state, draft, entry.id), templateId, widths[colIndex], layout.cellsPerPage >= 8) : cell(" ", widths[colIndex]));
+        cells.push(entry ? await contactCell(context(templateId, state, draft, entry.id), templateId, widths[colIndex], layout.cellsPerPage >= 8, imageCache) : cell(" ", widths[colIndex]));
       }
       pageRows.push(new TableRow({ cantSplit: true, height: { value: Math.floor(14200 / rowCount), rule: HeightRule.ATLEAST }, children: cells }));
     }
@@ -208,7 +229,7 @@ async function contactPages(templateId, state, draft, childIds) {
   return children;
 }
 
-async function documentContent(templateId, state, draft, childId) {
+async function documentContent(templateId, state, draft, childId, imageCache) {
   const ctx = context(templateId, state, draft, childId);
   const { f, meta, report, body, photos } = ctx;
   const children = documentHeader(ctx, f.title || ctx.template.name);
@@ -229,13 +250,13 @@ async function documentContent(templateId, state, draft, childId) {
     children.push(table(["週次", "班級", "班級老師", "活動日期"], [[f.week, meta.className, meta.ownerName, f.dateRange]], [1400, 2500, 3000, 3566]));
     children.push(...block("課程目標", f.goals), ...block("課程執行概述", f.summary), heading("活動紀錄"));
     children.push(tableForDraft(ctx, [2200, 5900, 2366], Array.from({ length: 3 }, () => ({}))));
-    children.push(...block("學習區與教學紀錄", body), ...await photoBlock(photos, 4, 230, 150), ...block("教學省思", f.reflection));
+    children.push(...block("學習區與教學紀錄", body), ...await photoBlock(photos, 4, 230, 150, imageCache), ...block("教學省思", f.reflection));
   } else if (templateId === "formative") {
     children.push(labelValue("評量期間", f.dateRange), labelValue("幼兒姓名／老師", `${report?.child.name || ""}　${meta.ownerName || ""}`));
     const records = draft.rows.length ? draft.rows : (report?.indicators || []).map((item) => ({ item }));
     const rows = records.length ? records : Array.from({ length: 7 }, () => ({}));
     children.push(table(["領域", "評量項目", "穩定發展", "發展中", "加油"], rows.map((item) => [item.domain, item.item, item.rating === "穩定發展" ? "✓" : "", item.rating === "發展中" ? "✓" : "", item.rating === "加油" ? "✓" : ""]), [1800, 5466, 1066, 1067, 1067]));
-    children.push(...block("綜合觀察", body), ...await photoBlock(photos, 1, 240, 160), ...block("家長回饋／簽章", f.parentFeedback));
+    children.push(...block("綜合觀察", body), ...await photoBlock(photos, 1, 240, 160, imageCache), ...block("家長回饋／簽章", f.parentFeedback));
   } else if (templateId === "summative") {
     children.push(labelValue("幼兒姓名／老師", `${report?.child.name || ""}　${meta.ownerName || ""}`));
     children.push(table(["評量階段", "第一學期期初", "第一學期期末", "第二學期學年末"], [["評量日期", f.firstDate, f.secondDate, f.thirdDate]], [2466, 2666, 2667, 2667]));
@@ -252,7 +273,7 @@ async function documentContent(templateId, state, draft, childId) {
     children.push(tableForDraft(ctx, [1366, 1820, 1820, 1820, 1820, 1820], times.map((time) => ({ time }))));
     children.push(...block("備註", f.notes));
   } else if (templateId.startsWith("contact-") || templateId === "course-share") {
-    return contactPages(templateId, state, draft, childId ? [childId] : state.children.map((item) => item.id));
+    return contactPages(templateId, state, draft, childId ? [childId] : state.children.map((item) => item.id), imageCache);
   } else if (templateId === "notice") {
     children.push(labelValue("日期", f.date), ...block("親愛的家長您好：", f.body), ...block("家長協助事項", f.reminder));
     children.push(para(`${meta.ownerName || "班級老師"} 敬上`, { align: AlignmentType.RIGHT, after: 230 }));
@@ -276,9 +297,9 @@ function makeDocument(template, children) {
   });
 }
 
-export async function buildWordBlob(templateId, state, draft, childId = "") {
+export async function buildWordBlob(templateId, state, draft, childId = "", imageCache = new Map()) {
   const template = getDocumentTemplate(templateId);
-  const children = await documentContent(templateId, state, draft, childId);
+  const children = await documentContent(templateId, state, draft, childId, imageCache);
   const blob = await Packer.toBlob(makeDocument(template, children));
   return new Blob([blob], { type: DOCX_MIME });
 }
@@ -287,9 +308,10 @@ export async function buildClassWordBlob(templateId, state, draft) {
   const template = getDocumentTemplate(templateId);
   if (template.scope !== "child" || templateId.startsWith("contact-") || templateId === "course-share") return buildWordBlob(templateId, state, draft, "");
   const children = [];
+  const imageCache = new Map();
   for (const child of state.children) {
     if (children.length) children.push(new Paragraph({ pageBreakBefore: true, children: [new TextRun("")] }));
-    children.push(...await documentContent(templateId, state, draft, child.id));
+    children.push(...await documentContent(templateId, state, draft, child.id, imageCache));
   }
   const blob = await Packer.toBlob(makeDocument(template, children));
   return new Blob([blob], { type: DOCX_MIME });
@@ -299,8 +321,9 @@ export async function buildClassZipBlob(templateId, state, draft) {
   const template = getDocumentTemplate(templateId);
   if (template.scope !== "child") throw new Error("This document is not child-specific");
   const zip = new JSZip();
+  const imageCache = new Map();
   for (const child of state.children) {
-    const blob = await buildWordBlob(templateId, state, draft, child.id);
+    const blob = await buildWordBlob(templateId, state, draft, child.id, imageCache);
     zip.file(`${String(child.seat).padStart(2, "0")}-${child.name}-${template.name}.docx`, await blob.arrayBuffer());
   }
   return zip.generateAsync({ type: "blob", mimeType: "application/zip" });
@@ -316,7 +339,7 @@ export async function buildGrowthReportBlob(report, settings = {}) {
     heading("老師的觀察"),
   ];
   for (const observation of report.observations) children.push(para(observation.date, { bold: true, size: 17 }), ...lines(observation.text, { after: 140 }));
-  children.push(heading("成長片刻"), ...await photoBlock(report.photos, 3, 240, 160));
+  children.push(heading("成長片刻"), ...await photoBlock(report.photos, 3, 240, 160, new Map()));
   children.push(heading("學習指標"), ...report.indicators.map((indicator) => para(`• ${indicator}`)));
   children.push(para(`紀錄者：${meta.ownerName || "未填寫"}`, { align: AlignmentType.RIGHT, after: 0 }));
   const blob = await Packer.toBlob(makeDocument({ pageSize: "A4", orientation: "portrait" }, children));

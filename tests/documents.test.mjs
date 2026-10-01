@@ -156,3 +156,24 @@ test("monthly sharing places two photos on one line to preserve four cells per A
   assert.equal(photoParagraphs.length, 1);
   assert.equal((photoParagraphs[0].match(/<w:drawing>/g) || []).length, 2);
 });
+
+test("whole-class Word loads a repeated photo source only once", async () => {
+  const { createDefaultDocumentDraft } = await import("../src/lib/documentCatalog.js");
+  const { buildClassWordBlob } = await import("../src/lib/wordDocuments.js");
+  const state = createInitialState();
+  state.children = Array.from({ length: 12 }, (_, index) => ({ id: `qa-${index}`, seat: index + 1, name: `測試${index}` }));
+  state.observations = [];
+  state.photos = [1, 2].map((number) => ({ id: `photo-${number}`, src: "/sproutnote/demo/repeated.png", title: `照片${number}`, childIds: state.children.map((child) => child.id) }));
+  const draft = createDefaultDocumentDraft("course-share");
+  draft.photoIds = state.photos.map((photo) => photo.id);
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return { ok: true, blob: async () => new Blob([Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64")], { type: "image/png" }) };
+  };
+  try {
+    await buildClassWordBlob("course-share", state, draft);
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
